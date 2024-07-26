@@ -18,3 +18,11 @@ vqmod/logs/*
 vqmod/vqcache/*
 vqmod/checked.cache
 vqmod/mods.cache
+
+vendor
+composer.phar
+phpunit.xml
+composer.lock
+.DS_Store
+composer.json~
+README.md~

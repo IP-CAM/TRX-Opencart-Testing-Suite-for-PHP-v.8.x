@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="http://schema.phpunit.de/4.0/phpunit.xsd"
+         backupGlobals="false"
+         stopOnFailure="false"
+         processIsolation="false"
+         bootstrap="bootstrap.php"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         colors="true"
+         testdox="true"
+         >
+  <testsuites>
+    <testsuite name="opencart-catalog-controller-seller">
+      <directory suffix="Test.php">opencart/catalog/controller/seller</directory>
+    </testsuite>
+
+    <testsuite name="opencart-catalog-controller-account">
+      <directory suffix="Test.php">opencart/catalog/controller/account</directory>
+    </testsuite>
+
+    <testsuite name="opencart-catalog-controller-account">
+      <directory suffix="Test.php">opencart/catalog/controller/product</directory>
+    </testsuite>
+
+    <testsuite name="opencart-library">
+      <directory suffix="Test.php">opencart/system/library</directory>
+    </testsuite>
+    
+    <testsuite name="opencart-sanity">
+      <directory suffix="Test.php">opencart/sanity</directory>
+    </testsuite>
+
+    <!--
+    <testsuite name="large">
+      <directory suffix=".phpt">tests/TextUI</directory>
+    </testsuite>
+    -->
+  </testsuites>
+
+  <logging>
+    <!-- log type="coverage-html" target="build/coverage" title="PHPUnit" highlight="true"/ -->
+    <!-- log type="coverage-clover" target="build/logs/clover.xml"/ -->
+    <!-- log type="junit" target="build/logs/junit.xml" logIncompleteSkipped="false"/ -->
+  </logging>
+
+<!--
+  <filter>
+    <whitelist processUncoveredFilesFromWhitelist="true">
+      <directory suffix=".php">src</directory>
+      <exclude>
+       <file></file>
+      </exclude>
+    </whitelist>
+  </filter>
+-->
+  <php>
+    <const name="PHPUNIT_TESTSUITE" value="true"/>
+  </php>
+</phpunit>
