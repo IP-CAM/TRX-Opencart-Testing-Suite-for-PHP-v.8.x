@@ -1,10 +1,17 @@
 <?php
 
-abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
+use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Before;
+use PHPUnit\Framework\Attributes\After;
+
+// abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
+abstract class OpenCartTest extends TestCase
+{
 
     protected $registry;
     protected $front;
     protected static $tablesCreated = false;
+
 
     public function __construct(string $name = '')
     {
@@ -13,6 +20,73 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
         $this->init();
     }
 
+    #[Before]
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Check if the test class uses DatabaseTransactions
+        if (in_array(DatabaseTransactions::class, class_uses($this))) {
+            $this->startTransactions();
+        }
+    }
+
+    #[After]
+    protected function tearDown(): void
+    {
+        // Check if the test class uses DatabaseTransactions
+        if (in_array(DatabaseTransactions::class, class_uses($this))) {
+            $this->rollbackTransactions();
+        }
+
+        parent::tearDown();
+    }
+    
+    protected $db;
+
+    protected $arConnection;
+
+    protected $transactionStarted = false;
+
+    protected function startTransactions(): void
+    {
+        if ($this->transactionStarted) {
+            return;
+        }
+
+        // OpenCart DB Transaction
+        if ($this->registry && $this->registry->get('db')) {
+            $this->db = $this->registry->get('db');
+            $this->db->begin();
+        }
+
+        // ActiveRecord Transaction
+        if (class_exists('ActiveRecord\ConnectionManager')) {
+            $this->arConnection = ActiveRecord\ConnectionManager::get_connection();
+            $this->arConnection->transaction();
+        }
+
+        $this->transactionStarted = true;
+    }
+
+    protected function rollbackTransactions(): void
+    {
+        if (!$this->transactionStarted) {
+            return;
+        }
+
+        // Rollback OpenCart DB
+        if (isset($this->db)) {
+            $this->db->rollback();
+        }
+
+        // Rollback ActiveRecord
+        if (isset($this->arConnection)) {
+            $this->arConnection->rollback();
+        }
+
+        $this->transactionStarted = false;
+    }
     protected static function isAdmin()
     {
         return preg_match('/^Admin/', get_called_class()) == true;
@@ -46,7 +120,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
 
         // either load admin or catalog config.php		
         $path = self::getConfigurationPath();
-//print "path:$path\n";		exit;
+
         // Configuration
         if (file_exists($path)) {
             require_once($path);
@@ -55,7 +129,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
         }
     }
 
-    public function init() : void
+    public function init(): void
     {
         $this->loadConfiguration();
 
@@ -91,7 +165,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
         // Config
         $config = new Config();
         $this->registry->set('config', $config);
-//print "DB:" .  DB_DRIVER . " " . DB_HOSTNAME . " " . DB_USERNAME . " " . DB_PASSWORD . " " . DB_DATABASE; exit;
+
         // Database
         $db = new DB(DB_DRIVER, DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE);
         $this->registry->set('db', $db);
@@ -100,7 +174,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
         if (!self::$tablesCreated) {
             $lines = null;
 
-            if(defined('SQL_FILE')) {
+            if (defined('SQL_FILE')) {
                 $file = SQL_FILE;
                 $lines = file($file);
             }
@@ -125,22 +199,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
                 }
 
                 $db->query("SET CHARACTER SET utf8");
-                /**
-                $db->query("SET @@session.sql_mode = 'MYSQL40'");
 
-                $db->query("DELETE FROM `" . DB_PREFIX . "user` WHERE user_id = '1'");
-                $db->query("INSERT INTO `" . DB_PREFIX . "user` SET user_id = '1', user_group_id = '1', username = 'admin', salt = '" . $db->escape($salt = substr(md5(uniqid(rand(), true)), 0, 9)) . "', password = '" . $db->escape(sha1($salt . sha1($salt . sha1('admin')))) . "', status = '1', email = '" . $db->escape('admin@localhost') . "', date_added = NOW()");
-
-                $db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE `key` = 'config_email'");
-                $db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `group` = 'config', `key` = 'config_email', value = '" . $db->escape('admin@localhost') . "'");
-
-                $db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE `key` = 'config_url'");
-                $db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `group` = 'config', `key` = 'config_url', value = '" . $db->escape($_SERVER['HTTP_HOST']) . "'");
-
-                $db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE `key` = 'config_encryption'");
-                $db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `group` = 'config', `key` = 'config_encryption', value = '" . $db->escape(md5(mt_rand())) . "'");
-                 * 
-                 */
                 $db->query("UPDATE `" . DB_PREFIX . "product` SET `viewed` = '0'");
             }
 
@@ -315,9 +374,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
 
             $this->front->addPreAction(new Action('common/seo_url'));
         }
-       
-        // Maintenance Mode
-        // $this->front->addPreAction(new Action('common/maintenance'));
+
     }
 
     public function customerLogin($user, $password, $override = false)
@@ -328,7 +385,7 @@ abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
         //@see oc_events
         //@see catalog/controller/trx/auth.php
         $this->event->trigger('post.customer.login');
-        
+
         if (!$logged) {
             throw new Exception('Could not login customer');
         }
