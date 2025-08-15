@@ -1,8 +1,7 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
-use PHPUnit\Framework\Attributes\Before;
-use PHPUnit\Framework\Attributes\After;
+use trx\Services\FeatureFlag;
 
 // abstract class OpenCartTest extends \PHPUnit\Framework\TestCase {
 abstract class OpenCartTest extends TestCase
@@ -12,7 +11,6 @@ abstract class OpenCartTest extends TestCase
     protected $front;
     protected static $tablesCreated = false;
 
-
     public function __construct(string $name = '')
     {
         parent::__construct($name);
@@ -20,10 +18,12 @@ abstract class OpenCartTest extends TestCase
         $this->init();
     }
 
-    #[Before]
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Load controller files for coverage tracking
+        $this->loadControllersForCoverage();
 
         // Check if the test class uses DatabaseTransactions
         if (in_array(DatabaseTransactions::class, class_uses($this))) {
@@ -31,7 +31,135 @@ abstract class OpenCartTest extends TestCase
         }
     }
 
-    #[After]
+    /**
+     * Load controller files for coverage tracking
+     * This ensures OpenCart controllers are properly tracked by PHPUnit coverage
+     */
+    protected function loadControllersForCoverage(): void
+    {
+        // Get the test class name and try to determine the controller path
+        $testClass = get_class($this);
+
+        // Extract controller path from test class name
+        // E.g., ControllerStudioWorkbenchVoicecopyTest -> studio/workbench_voicecopy
+        if (preg_match('/Controller(.+)Test$/', $testClass, $matches)) {
+            $controllerPath = $this->convertClassNameToPath($matches[1]);
+            $this->loadControllerFile($controllerPath);
+        }
+
+        // Also try to auto-detect from test file path
+        $this->loadControllerFromTestPath();
+    }
+
+    /**
+     * Convert CamelCase controller name to OpenCart path format
+     * E.g., StudioWorkbenchVoicecopy -> studio/workbench_voicecopy
+     */
+    protected function convertClassNameToPath(string $className): string
+    {
+        // Convert CamelCase to snake_case with directory separators
+        $path = preg_replace('/([A-Z])/', '_$1', $className);
+        $path = trim($path, '_');
+        $path = strtolower($path);
+
+        // Convert underscores to directory separators for major sections
+        // This is a heuristic - you might need to adjust based on your naming conventions
+        $parts = explode('_', $path);
+
+        if (count($parts) >= 2) {
+            // Assume first part is the directory, rest form the filename
+            $directory = $parts[0];
+            $filename = implode('_', array_slice($parts, 1));
+            return $directory . '/' . $filename;
+        }
+
+        return $path;
+    }
+
+    /**
+     * Load controller file from test path detection
+     */
+    protected function loadControllerFromTestPath(): void
+    {
+        $reflection = new ReflectionClass($this);
+        $testFile = $reflection->getFileName();
+
+        // Extract controller path from test file path
+        // E.g., /tests/phpunit/opencart/catalog/controller/studio/ControllerStudioWorkbenchVoicecopyTest.php
+        // Should map to: /htdocs/catalog/controller/studio/workbench_voicecopy.php
+
+        if (preg_match('/\/tests\/phpunit\/opencart\/(.+)\/([^\/]+)Test\.php$/', $testFile, $matches)) {
+            $basePath = $matches[1]; // e.g., catalog/controller/studio
+            $testClassName = $matches[2]; // e.g., ControllerStudioWorkbenchVoicecopy
+
+            // Extract just the controller name part
+            if (preg_match('/Controller(.+)$/', $testClassName, $controllerMatches)) {
+                $controllerName = $this->camelCaseToSnakeCase($controllerMatches[1]);
+                $controllerPath = $basePath . '/' . $controllerName . '.php';
+                $this->loadControllerFile($controllerPath, false); // Don't convert path
+            }
+        }
+    }
+
+    /**
+     * Convert CamelCase to snake_case
+     */
+    protected function camelCaseToSnakeCase(string $input): string
+    {
+        // Handle specific cases like "StudioWorkbenchVoicecopy" -> "workbench_voicecopy"
+        // Remove the first part if it matches the directory
+        $parts = preg_split('/(?=[A-Z])/', $input, -1, PREG_SPLIT_NO_EMPTY);
+
+        if (count($parts) > 1) {
+            // Skip first part if it's likely a directory name (Studio, Admin, etc.)
+            $firstPart = strtolower($parts[0]);
+            $remainingParts = array_slice($parts, 1);
+
+            // Check if we should include the first part or skip it
+            $controllerName = implode('_', array_map('strtolower', $remainingParts));
+            return $controllerName;
+        }
+
+        return strtolower($input);
+    }
+
+    /**
+     * Load a specific controller file for coverage tracking
+     */
+    protected function loadControllerFile(string $controllerPath, bool $convertPath = true): void
+    {
+        if ($convertPath) {
+            $controllerPath = $this->convertClassNameToPath($controllerPath);
+        }
+
+        // Try different base paths
+        $basePaths = [
+            '/var/www/trx-enterprise-php/htdocs/catalog/controller/',
+            '/var/www/trx-enterprise-php/htdocs/admin/controller/',
+            DIR_APPLICATION . 'controller/',
+        ];
+
+        foreach ($basePaths as $basePath) {
+            $fullPath = $basePath . $controllerPath;
+
+            if (file_exists($fullPath)) {
+                require_once $fullPath;
+                return;
+            }
+        }
+
+        // If auto-detection fails, log it but don't fail the test
+        error_log("Coverage: Could not find controller file for path: {$controllerPath}");
+    }
+
+    /**
+     * Manually load a controller file for coverage (for use in individual tests)
+     */
+    protected function loadControllerForCoverage(string $controllerPath): void
+    {
+        $this->loadControllerFile($controllerPath);
+    }
+
     protected function tearDown(): void
     {
         // Check if the test class uses DatabaseTransactions
@@ -41,10 +169,10 @@ abstract class OpenCartTest extends TestCase
 
         parent::tearDown();
     }
-    
+
     protected $db;
 
-    protected $arConnection;
+    // protected $arConnection;
 
     protected $transactionStarted = false;
 
@@ -60,11 +188,11 @@ abstract class OpenCartTest extends TestCase
             $this->db->begin();
         }
 
-        // ActiveRecord Transaction
-        if (class_exists('ActiveRecord\ConnectionManager')) {
-            $this->arConnection = ActiveRecord\ConnectionManager::get_connection();
-            $this->arConnection->transaction();
-        }
+        // // ActiveRecord Transaction
+        // if (class_exists('ActiveRecord\ConnectionManager')) {
+        //     $this->arConnection = ActiveRecord\ConnectionManager::get_connection();
+        //     $this->arConnection->transaction();
+        // }
 
         $this->transactionStarted = true;
     }
@@ -80,10 +208,10 @@ abstract class OpenCartTest extends TestCase
             $this->db->rollback();
         }
 
-        // Rollback ActiveRecord
-        if (isset($this->arConnection)) {
-            $this->arConnection->rollback();
-        }
+        // // Rollback ActiveRecord
+        // if (isset($this->arConnection)) {
+        //     $this->arConnection->rollback();
+        // }
 
         $this->transactionStarted = false;
     }
@@ -113,7 +241,6 @@ abstract class OpenCartTest extends TestCase
 
     public function loadConfiguration()
     {
-
         if (defined('HTTP_SERVER')) {
             return;
         }
@@ -166,8 +293,12 @@ abstract class OpenCartTest extends TestCase
         $config = new Config();
         $this->registry->set('config', $config);
 
+        //Template Resolver
+        $this->registry->set('template_resolver', new Template_Resolver($this->registry));
+
         // Database
         $db = new DB(DB_DRIVER, DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE);
+        $this->db = $db;
         $this->registry->set('db', $db);
 
         // Recreating the database
@@ -259,6 +390,12 @@ abstract class OpenCartTest extends TestCase
         $filemanager = new TrxFileManager($this->registry);
         $this->registry->set('filemanager', $filemanager);
 
+        // TRX Custom - FeatureFlag service (if available)
+        if (class_exists('\\trx\\Services\\FeatureFlag')) {
+            $featureFlag = new FeatureFlag();
+            $this->registry->set('featureFlag', $featureFlag);
+        }
+
         // Language Detection
         $languages = array();
 
@@ -309,6 +446,7 @@ abstract class OpenCartTest extends TestCase
 
         // Language
         $language = new Language($languages[$code]['directory']);
+        $language->setLanguageInfo($languages[$code]);
         //$language->load($languages[$code]['filename']);
         $language->load($languages[$code]['directory']);
 
@@ -374,7 +512,6 @@ abstract class OpenCartTest extends TestCase
 
             $this->front->addPreAction(new Action('common/seo_url'));
         }
-
     }
 
     public function customerLogin($user, $password, $override = false)
